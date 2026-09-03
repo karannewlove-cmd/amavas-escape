@@ -8,15 +8,16 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>अमावस — Horror Escape</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌕</text></svg>">
+<!-- favicon dropped: data-URI svg breaks some WebView parsers -->
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:100%; height:100%; overflow:hidden; background:#050508; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#050508; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; touch-action:none; }
   canvas { display:block; touch-action:none; }
   .hud { position:fixed; top:0; left:0; right:0; padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 0; display:flex; justify-content:space-between; align-items:center; pointer-events:none; z-index:5; font-weight:700; color:#cfd2dc; text-shadow:0 2px 6px #000; }
   .hud .keys { font-size:16px; letter-spacing:2px; }
   .hud .time { font-size:14px; opacity:.85; font-variant-numeric:tabular-nums; }
   #toast { position:fixed; left:50%; bottom:14%; transform:translateX(-50%); background:rgba(10,8,12,.88); border:1px solid #3a2a3a; color:#ffd9e8; padding:8px 16px; border-radius:20px; font-size:14px; font-weight:600; opacity:0; transition:opacity .35s; pointer-events:none; z-index:6; white-space:nowrap; }
+  #errbox { position:fixed; left:10px; right:10px; bottom:10px; background:rgba(120,0,0,.92); color:#fff; padding:10px 14px; border-radius:10px; font-size:13px; z-index:99; opacity:0; transition:opacity .3s; pointer-events:none; font-family:monospace; }
   .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; z-index:10; padding:24px; background:radial-gradient(ellipse at center, rgba(8,6,10,.92) 0%, rgba(2,2,4,.98) 100%); }
   .screen.hidden { display:none; }
   .screen h1 { font-size:34px; color:#ffd9e8; text-shadow:0 0 24px #a33; margin-bottom:10px; letter-spacing:2px; }
@@ -34,6 +35,7 @@
 <canvas id="c"></canvas>
 <div class="hud"><span class="keys" id="hudKeys">🗝️ 0/3</span><span class="time" id="hudTime">0:00</span></div>
 <div id="toast"></div>
+<div id="errbox"></div>
 <div id="start" class="screen">
   <div class="big">🌕</div>
   <h1>अमावस की रात</h1>
@@ -57,7 +59,7 @@
 "use strict";
 // ---------- setup ----------
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-const DPR=Math.min(window.devicePixelRatio||1,2);
+const DPR=Math.min(window.devicePixelRatio||1,1.5);
 let W=0,H=0;
 function resize(){ W=innerWidth; H=innerHeight; canvas.width=W*DPR; canvas.height=H*DPR; canvas.style.width=W+'px'; canvas.style.height=H+'px'; ctx.setTransform(DPR,0,0,DPR,0,0); }
 addEventListener('resize',resize); resize();
@@ -145,15 +147,18 @@ canvas.addEventListener('contextmenu',e=>e.preventDefault());
 let AC=null;
 function ac(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC&&AC.state==='suspended')AC.resume(); return AC; }
 function tone(freq,dur,type,gain,when,slideTo){
+  try{
   const a=ac(); if(!a)return;
   const o=a.createOscillator(),g=a.createGain(),t=a.currentTime+when;
   o.type=type; o.frequency.setValueAtTime(freq,t);
   if(slideTo)o.frequency.exponentialRampToValueAtTime(slideTo,t+dur);
   g.gain.setValueAtTime(gain,t); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
   o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+.02);
+  }catch(e){}
 }
 let droneNodes=null;
 function drone(){
+  try{
   const a=ac(); if(!a||droneNodes)return;
   const g=a.createGain(); g.gain.value=.05;
   const f=a.createBiquadFilter(); f.type='lowpass'; f.frequency.value=240;
@@ -161,16 +166,19 @@ function drone(){
   const o2=a.createOscillator(); o2.type='sine'; o2.frequency.value=46.5;
   o1.connect(g);o2.connect(g);g.connect(f).connect(a.destination);o1.start();o2.start();
   droneNodes=[o1,o2];
+  }catch(e){}
 }
 function chime(){ tone(660,.12,'triangle',.18); tone(880,.18,'triangle',.18,.1); }
 function winChime(){ [523,659,784,1047].forEach((f,i)=>tone(f,.22,'triangle',.2,i*.14)); }
 function screech(){
+  try{
   const a=ac(); if(!a)return;
   tone(900,.5,'sawtooth',.22,0,70);
   const dur=.5,t=a.currentTime,len=a.sampleRate*dur,buf=a.createBuffer(1,len,a.sampleRate),d=buf.getChannelData(0);
   for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
   const src=a.createBufferSource();src.buffer=buf;
   const g=a.createGain();g.gain.value=.3;src.connect(g).connect(a.destination);src.start();
+  }catch(e){}
 }
 function thump(){ tone(58,.14,'sine',.3,0,34); }
 function setHeartbeat(on){
@@ -209,6 +217,9 @@ function update(dt){
       if(keysFound<3)toast('🗝️ Chabi mil gayi! ('+keysFound+'/3)');
       else toast('🚪 Darwaza khul gaya! Bhag!');
     }
+  }
+  if(msgCooldown<=0)for(const k of keysArr){
+    if(!k.taken&&dist(player.x,player.y,k.x,k.y)<150){ toast('🗝️ Chabi paas me hai…'); msgCooldown=2.5; break; }
   }
   if(!monster.active&&keysFound>0){ monster.active=true; toast('👁️ Kuch hila… andar kuch aur hai.'); }
   let dNear=1e9;
@@ -269,15 +280,15 @@ function draw(){
   ctx.fillText(open?'बाहर →':'बाहर',0,34);
   if(open){ ctx.shadowColor='#3dff7a'; ctx.shadowBlur=16; ctx.strokeStyle='rgba(90,255,140,.7)'; ctx.strokeRect(-24,-24,48,48); ctx.shadowBlur=0; }
   ctx.restore();
-  // keys
+  // keys (in-world, subdued \u2014 beacon overlay andhere me visibility deta hai)
   ctx.textBaseline='middle';
   for(const k of keysArr){
     if(k.taken)continue;
     const pulse=1+Math.sin(t*4+k.x)*.08;
     ctx.save(); ctx.translate(k.x,k.y);
-    ctx.shadowColor='rgba(255,190,60,.95)'; ctx.shadowBlur=16;
-    ctx.font=(30*pulse)+'px serif'; ctx.textAlign='center';
-    ctx.fillText('🗝️',0,0);
+    ctx.shadowColor='rgba(255,190,60,.7)'; ctx.shadowBlur=10;
+    ctx.font=(24*pulse)+'px serif'; ctx.textAlign='center';
+    ctx.fillText('\ud83d\udddd\ufe0f',0,0);
     ctx.restore();
   }
   // monster
@@ -323,6 +334,21 @@ function draw(){
     ctx.fillStyle='rgba(255,255,255,.55)';
     ctx.beginPath(); ctx.arc(joy.base.x+joy.x*48,joy.base.y+joy.y*48,7,0,7); ctx.fill();
   }
+  // key beacons (andhere me bhi dikhengi — walls ke aar-paar light)
+  ctx.textBaseline='middle';
+  for(const k of keysArr){
+    if(k.taken)continue;
+    const sx=k.x-camX, sy=k.y-camY;
+    if(sx<-60||sx>W+60||sy<-60||sy>H+60)continue;
+    const pulse=.5+.5*Math.sin(t*3+k.x);
+    const glow=ctx.createRadialGradient(sx,sy,0,sx,sy,46);
+    glow.addColorStop(0,'rgba(255,190,60,'+(0.28+0.18*pulse)+')');
+    glow.addColorStop(1,'rgba(255,190,60,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(sx,sy,46,0,7); ctx.fill();
+    ctx.font='26px serif'; ctx.textAlign='center';
+    ctx.fillStyle='rgba(255,230,170,'+(0.8+0.2*pulse)+')';
+    ctx.fillText('🗝️',sx,sy);
+  }
   // vignette
   const v=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.max(W,H)*.75);
   v.addColorStop(0,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(0,0,0,.75)');
@@ -339,7 +365,11 @@ function draw(){
 }
 
 // ---------- buttons & loop ----------
-function startGame(){ if(state!=='start')return; ac(); drone(); reset(); state='play'; hide('start'); }
+const errbox=document.getElementById('errbox');
+function showErr(m){ try{ errbox.textContent='⚠️ '+String(m); errbox.style.opacity=1; }catch(e){} }
+addEventListener('error',e=>showErr(e.message||'page error'));
+addEventListener('unhandledrejection',e=>showErr(e&&e.reason?e.reason:'promise error'));
+function startGame(){ if(state!=='start')return; ac(); drone(); reset(); state='play'; hide('start'); toast('Chabiyan chamakti hain — andhere me bhi dikhengi 🗝️'); }
 function restartGame(){ if(state!=='play')return; reset(); state='play'; hide('dead'); hide('win'); }
 const startBtn=document.querySelector('#start .btn');
 startBtn.addEventListener('click',startGame);
@@ -351,7 +381,7 @@ for(const sel of ['#dead .btn','#win .btn']){
 }
 function loop(now){
   const t=now/1000; const dt=Math.min(t-last,.05); last=t;
-  update(dt); draw();
+  try{ update(dt); draw(); }catch(e){ showErr(e&&e.message?e.message:String(e)); }
   document.getElementById('hudKeys').textContent='🗝️ '+keysFound+'/3';
   document.getElementById('hudTime').textContent=fmt(elapsed);
   requestAnimationFrame(loop);
